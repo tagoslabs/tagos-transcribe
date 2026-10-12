@@ -13,7 +13,7 @@ Nothing is sent to the cloud: models are downloaded once and then everything run
 - **Timestamps / SRT**: plain text, timestamped text, or SubRip `.srt` subtitles.
 - **Offline translation**: Argos Translate for English→Russian, NLLB-200 for other pairs.
 - **Review / editing**: stop after transcription or translation, edit the segments, then continue.
-- **Voice-over dubbing**: a Piper TTS voice is mixed over the original audio, aligned to the timecodes.
+- **Voice-over dubbing**: a Piper TTS voice for the target language is mixed over the original audio, aligned to the timecodes. `--voice` overrides that choice.
 
 Video input is any local file. The app has no built-in downloading.
 
@@ -47,7 +47,10 @@ Requires `curl`, `tar` and `ffmpeg`. If you move the folder, run `./install.sh` 
 | Original audio under voice-over | 20% | `--duck 0.2` |
 | Original audio kept as 2nd track | yes | `--no-original-track` to drop |
 | Subtitles burned/embedded | no | `--embed-subs` to embed the SRT |
-| Target language / voice | `ru` / `ru_RU-dmitri-medium` | `--target`, `--voice` |
+| Target language | `ru` | `--target` |
+| Piper voice | matches `--target` (`ru` → `ru_RU-dmitri-medium`, `es` → `es_ES-davefx-medium`, `en` → `en_US-lessac-medium`, and one voice for every other target) | `--voice` to override |
+
+Omitting `--voice` selects the Piper voice for `--target`. If that language has no built-in voice, the command stops instead of speaking with a voice from another language.
 
 ## License
 
@@ -100,7 +103,8 @@ venv/bin/python -m unittest discover -s tests
 ```bash
 ./setup.sh && ./run_gui.sh        # GUI
 ./run.sh video.mp4                # текст в терминал
-./dub.sh video.mp4 --target ru    # озвучка
+./dub.sh video.mp4 --target ru    # русский голос Piper
+./dub.sh video.mp4 --target es    # испанский голос Piper; --voice переопределяет
 ```
 
 Под MIT распространяется только исходный код. Зависимость piper-tts — GPL-3.0, модель NLLB-200 — CC-BY-NC 4.0 (только некоммерческое использование). Пользователь сам отвечает за соблюдение законов о согласии на запись и авторском праве.

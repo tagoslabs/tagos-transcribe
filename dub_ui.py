@@ -16,6 +16,7 @@ from dub import (
     DEFAULT_VOICE,
     DEFAULT_VOICES,
     PIPER_VOICES,
+    default_voice_for,
     TARGET_LANGUAGES,
     TRANSLATOR_THREAD_CAP,
     DubCancelled,
@@ -252,7 +253,13 @@ def build_dub_view(
         if threads < 1:
             raise ValueError(t("threads_min"))
         custom = (custom_voice.value or "").strip()
-        voice = custom or (voice_dropdown.value or DEFAULT_VOICE)
+        target = target_dropdown.value or "ru"
+        if custom:
+            voice = custom
+        else:
+            voice = (voice_dropdown.value or "").strip()
+            if not voice:
+                voice = default_voice_for(target)
         duck = float(duck_slider.value if duck_slider.value is not None else DEFAULT_DUCK * 100)
         speed = float(speed_slider.value if speed_slider.value is not None else DEFAULT_MAX_SPEED)
         if speed < 1.0:
@@ -261,7 +268,7 @@ def build_dub_view(
             model=get_model(),
             language=get_language(),
             device=get_device(),
-            target_language=target_dropdown.value or "ru",
+            target_language=target,
             translator=translator_dropdown.value or "auto",
             voice=voice,
             duck=duck / 100.0,
@@ -626,6 +633,7 @@ def build_dub_view(
         target = loaded.get("target_language")
         if target and any(code == target for code, _label in TARGET_LANGUAGES):
             target_dropdown.value = target
+            match_voice_to_target()
         state["done"] = False
         rebuild_review()
         paint_step()
@@ -658,7 +666,7 @@ def build_dub_view(
         else:
             show_message(t("srt_replaced_all"))
 
-    def on_target_changed(_=None) -> None:
+    def match_voice_to_target() -> None:
         if (custom_voice.value or "").strip():
             return
         voice = DEFAULT_VOICES.get(target_dropdown.value or "")
@@ -666,7 +674,11 @@ def build_dub_view(
             voice_dropdown.value = voice
             voice_hint.value = t("voice_hint_matched")
         else:
+            voice_dropdown.value = None
             voice_hint.value = t("voice_hint_missing")
+
+    def on_target_changed(_=None) -> None:
+        match_voice_to_target()
         paint_step()
         page.update()
 
