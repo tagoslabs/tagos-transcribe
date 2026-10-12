@@ -1,3 +1,5 @@
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,15 +11,23 @@ from dub import (
     DEFAULT_MAX_SPEED,
     DEFAULT_THREADS,
     DEFAULT_VOICE,
+    DEFAULT_VOICES,
     MIN_LENGTH_SCALE,
+    PIPER_VOICES,
+    TARGET_LANGUAGES,
     TRANSLATOR_THREAD_CAP,
     apply_atempo,
     atempo_chain,
     default_thread_count,
+    default_voice_for,
     fit_clip_to_slot,
+    main,
+    parse_args,
     resegment,
+    resolve_voice,
     segment_slot,
     select_translator,
+    _options_from_args,
 )
 
 
@@ -196,6 +206,64 @@ class TranslatorChoiceTests(unittest.TestCase):
         self.assertEqual(select_translator("nllb", "en", "ru"), "nllb")
         with self.assertRaises(ValueError):
             select_translator("argos", "es", "ru")
+
+
+class VoiceSelectionTests(unittest.TestCase):
+    def test_every_target_language_has_a_matching_piper_voice(self) -> None:
+        self.assertEqual(set(DEFAULT_VOICES), {code for code, _label in TARGET_LANGUAGES})
+        for code, _label in TARGET_LANGUAGES:
+            voice = default_voice_for(code)
+            self.assertIn(voice, PIPER_VOICES)
+            self.assertEqual(PIPER_VOICES[voice]["lang"], code)
+
+    def test_known_defaults(self) -> None:
+        self.assertEqual(default_voice_for("ru"), "ru_RU-dmitri-medium")
+        self.assertEqual(default_voice_for("es"), "es_ES-davefx-medium")
+        self.assertEqual(default_voice_for("en"), "en_US-lessac-medium")
+        self.assertEqual(default_voice_for("de"), "de_DE-thorsten-medium")
+        self.assertEqual(default_voice_for("fr"), "fr_FR-siwis-medium")
+        self.assertEqual(DEFAULT_VOICE, "ru_RU-dmitri-medium")
+
+    def test_missing_voice_does_not_fall_back_to_russian(self) -> None:
+        with self.assertRaises(ValueError) as caught:
+            default_voice_for("xx")
+        message = str(caught.exception)
+        self.assertIn("no Piper voice", message)
+        self.assertIn("'xx'", message)
+        self.assertIn("another language", message)
+
+    def test_explicit_voice_overrides_the_target_default(self) -> None:
+        self.assertEqual(resolve_voice("es", None), "es_ES-davefx-medium")
+        self.assertEqual(resolve_voice("es", "  "), "es_ES-davefx-medium")
+        self.assertEqual(resolve_voice("es", "en_US-lessac-medium"), "en_US-lessac-medium")
+        self.assertEqual(resolve_voice("xx", "ru_RU-ruslan-medium"), "ru_RU-ruslan-medium")
+
+    def test_cli_target_selects_the_voice(self) -> None:
+        spanish = _options_from_args(parse_args(["clip.mp4", "--target", "es"]))
+        self.assertEqual(spanish.target_language, "es")
+        self.assertEqual(spanish.voice, "es_ES-davefx-medium")
+
+        english = _options_from_args(parse_args(["clip.mp4", "--target", "en"]))
+        self.assertEqual(english.voice, "en_US-lessac-medium")
+
+        override = _options_from_args(
+            parse_args(["clip.mp4", "--target", "es", "--voice", "en_GB-alan-medium"])
+        )
+        self.assertEqual(override.target_language, "es")
+        self.assertEqual(override.voice, "en_GB-alan-medium")
+
+    def test_cli_rejects_a_target_with_no_piper_voice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "clip.wav"
+            source.write_bytes(b"not audio")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                code = main([str(source), "--target", "xx"])
+        self.assertEqual(code, 1)
+        message = stderr.getvalue()
+        self.assertIn("no Piper voice", message)
+        self.assertIn("'xx'", message)
+        self.assertNotIn("transcribe", message.lower())
 
 
 if __name__ == "__main__":

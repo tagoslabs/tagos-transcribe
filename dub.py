@@ -156,6 +156,10 @@ PIPER_VOICES: dict[str, dict[str, str]] = {
     "sv_SE-nst-medium": {"lang": "sv", "label": "NST (sv, medium)"},
     "fi_FI-harri-medium": {"lang": "fi", "label": "Harri (fi, medium)"},
     "ca_ES-upc_ona-medium": {"lang": "ca", "label": "Ona (ca, medium)"},
+    "ja_JP-hi_fi_captain-medium": {"lang": "ja", "label": "Hi-Fi Captain (ja, medium)"},
+    "ko_KR-kss-medium": {"lang": "ko", "label": "KSS (ko, medium)"},
+    "hi_IN-pratham-medium": {"lang": "hi", "label": "Pratham (hi, medium)"},
+    "he_IL-saspeech-medium": {"lang": "he", "label": "Saspeech (he, medium)"},
 }
 
 DEFAULT_VOICES = {
@@ -176,6 +180,10 @@ DEFAULT_VOICES = {
     "sv": "sv_SE-nst-medium",
     "fi": "fi_FI-harri-medium",
     "ca": "ca_ES-upc_ona-medium",
+    "ja": "ja_JP-hi_fi_captain-medium",
+    "ko": "ko_KR-kss-medium",
+    "hi": "hi_IN-pratham-medium",
+    "he": "he_IL-saspeech-medium",
 }
 
 TARGET_LANGUAGES = (
@@ -286,7 +294,28 @@ def select_translator(requested: str, source_language: str, target_language: str
 
 
 def default_voice_for(language: str) -> str:
-    return DEFAULT_VOICES.get(language, DEFAULT_VOICE)
+    """Piper voice for a translation target. Never substitutes another language."""
+    voice = DEFAULT_VOICES.get(language)
+    if voice:
+        return voice
+    known = ", ".join(
+        f"{code} ({DEFAULT_VOICES[code]})"
+        for code, _label in TARGET_LANGUAGES
+        if code in DEFAULT_VOICES
+    )
+    raise ValueError(
+        f"no Piper voice for target language '{language}'. "
+        "Refusing to speak with a voice from another language. "
+        f"Built-in voices: {known}. "
+        "Pass --voice with a Piper voice id to override."
+    )
+
+
+def resolve_voice(target_language: str, voice: str | None) -> str:
+    """Use an explicit Piper id, otherwise the voice for the target language."""
+    if voice is not None and str(voice).strip():
+        return str(voice).strip()
+    return default_voice_for(target_language)
 
 
 def iso639_2(language: str | None) -> str:
@@ -1221,7 +1250,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  ./dub.sh video.mp4 --stop-after-translate\n"
             "  ./dub.sh video.mp4 --segments video.segments.json\n"
             "  ./dub.sh video.mp4 --stop-after-transcribe\n"
-            "  ./dub.sh video.mp4 --target en --voice en_US-lessac-medium --duck 0.3 --max-speed 1.4\n"
+            "  ./dub.sh video.mp4 --target es\n"
+            "  ./dub.sh video.mp4 --target en --voice en_GB-alan-medium --duck 0.3 --max-speed 1.4\n"
         ),
     )
     parser.add_argument("input", type=Path, help="Video or audio file")
@@ -1245,8 +1275,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--voice",
-        default=DEFAULT_VOICE,
-        help="Piper voice id (default: ru_RU-dmitri-medium)",
+        default=None,
+        help=(
+            "Piper voice id. Defaults to a voice for --target "
+            "(ru: ru_RU-dmitri-medium, es: es_ES-davefx-medium, "
+            "en: en_US-lessac-medium, and one voice for every other target). "
+            "Pass --voice to override."
+        ),
     )
     parser.add_argument(
         "--duck",
@@ -1332,7 +1367,7 @@ def _options_from_args(args: argparse.Namespace) -> DubOptions:
         language=language,
         target_language=args.target,
         translator=args.translator,
-        voice=args.voice,
+        voice=resolve_voice(args.target, args.voice),
         duck=args.duck,
         max_speed=args.max_speed,
         threads=args.threads,
@@ -1374,7 +1409,11 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    options = _options_from_args(args)
+    try:
+        options = _options_from_args(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     outdir = Path(args.outdir) if args.outdir else source.parent
     base = source.stem
     started = time.time()
@@ -1397,6 +1436,7 @@ def main(argv: list[str] | None = None) -> int:
             language = loaded.get("language") or options.language
             if loaded.get("target_language"):
                 options.target_language = str(loaded["target_language"])
+                options.voice = resolve_voice(options.target_language, args.voice)
             duration = get_audio_duration(source, find_ffprobe())
             print(f"[resume] {len(segments)} segments from {args.segments}", flush=True)
         else:

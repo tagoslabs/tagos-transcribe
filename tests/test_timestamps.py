@@ -148,8 +148,11 @@ class CliDefaultTests(unittest.TestCase):
         self.assertEqual(args.max_speed, 1.6)
         self.assertEqual(args.threads, default_thread_count())
         self.assertLessEqual(args.threads, 4)
-        self.assertEqual(args.voice, "ru_RU-dmitri-medium")
+        self.assertIsNone(args.voice)
         self.assertEqual(args.target, "ru")
+        from dub import resolve_voice
+
+        self.assertEqual(resolve_voice(args.target, args.voice), "ru_RU-dmitri-medium")
         self.assertEqual(args.translator, "auto")
         self.assertFalse(args.embed_subs)
         self.assertFalse(args.no_original_track)
