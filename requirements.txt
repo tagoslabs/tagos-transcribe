@@ -1,0 +1,11 @@
+# Direct dependencies. Versions are exact.
+# setup.sh installs the full closed set from requirements.lock,
+# including these packages and every library they need.
+# nvidia-cublas-cu12 is not listed: setup chooses the build the NVIDIA driver can load.
+faster-whisper==1.2.1
+av==19.0.1
+flet==1.0.4
+ctranslate2==4.8.2
+sentencepiece==0.2.2
+piper-tts==1.8.0
+numpy==2.5.4
