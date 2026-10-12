@@ -65,11 +65,15 @@ Models are **not** included in this repository; they are downloaded on first use
 |---|---|---|
 | OpenAI Whisper via faster-whisper (Systran CTranslate2 conversions) | transcription | MIT |
 | **NLLB-200 distilled 600M** (Meta; CT2 int8 conversion `JustFrederik/nllb-200-distilled-600M-ct2-int8`) | translation for all pairs except en→ru | **CC-BY-NC 4.0 — non-commercial use only** |
-| Argos Translate `translate-en_ru` 1.9 | en→ru translation (default for that pair) | see the package README/metadata; trained on OPUS data |
-| Piper voices (`rhasspy/piper-voices`) | TTS voice-over | per voice — see each voice's `MODEL_CARD` (e.g. `ru_RU-dmitri-medium`: dataset CC0, fine-tuned from `en_US-lessac`) |
+| Argos Translate `translate-en_ru` 1.9 | en→ru translation (default for that pair) | **no explicit license** in the package (README lists OPUS training corpora only; [argos-translate#507](https://github.com/argosopentech/argos-translate/issues/507)). Argos states its own model work is MIT/CC0 ([#76](https://github.com/argosopentech/argos-translate/issues/76)); individual corpora may carry their own terms |
+| Piper voice `ru_RU-dmitri-medium` (default) | TTS voice-over | dataset CC0, but **fine-tuned from `en_US-lessac`** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/dmitri/medium/MODEL_CARD)) |
+| Piper base voice `en_US-lessac` | base of the Dmitri voice | Blizzard 2013 Lessac data: **research-only licence, commercial use excluded** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD), [licence](https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html)) |
+| Other Piper voices | `--voice` | per voice — see each voice's `MODEL_CARD` |
 | piper-tts (Python package) | TTS engine | GPL-3.0-or-later |
 
 > **Non-commercial notice:** translations produced with NLLB-200 are subject to CC-BY-NC 4.0. Do not use the NLLB path commercially. For English→Russian the app uses Argos by default (`--translator auto`).
+>
+> The default Russian voice (`ru_RU-dmitri-medium`) is derived from `en_US-lessac`, whose training data is licensed for research only. For commercial use, choose a Piper voice whose MODEL_CARD lists a permissive dataset license and that is not fine-tuned from lessac.
 
 ## Responsible use
 
