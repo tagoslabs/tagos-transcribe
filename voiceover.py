@@ -79,6 +79,10 @@ def voices_for_language(language: str, models_dir: Path = MODELS_DIR) -> list[st
     default = DEFAULT_VOICES.get(language)
     if default and default not in voices:
         voices.append(default)
+    # The whole catalog for this language, same choice as in Dubbing (downloads on first use).
+    for name, info in PIPER_VOICES.items():
+        if info["lang"] == language and name not in voices:
+            voices.append(name)
     return voices
 
 

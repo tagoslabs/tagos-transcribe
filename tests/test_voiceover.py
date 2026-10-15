@@ -108,8 +108,8 @@ class VoiceListTests(unittest.TestCase):
             (piper / "en_GB-alan-medium.onnx.json").write_text("{}")
             (piper / "ru_RU-half-medium.onnx").write_bytes(b"")
             self.assertEqual(installed_voices(Path(tmp)), ["en_GB-alan-medium"])
-            self.assertEqual(voices_for_language("en", Path(tmp)), ["en_GB-alan-medium", "en_US-lessac-medium"])
-            self.assertEqual(voices_for_language("ru", Path(tmp)), ["ru_RU-dmitri-medium"])
+            self.assertEqual(voices_for_language("en", Path(tmp))[:2], ["en_GB-alan-medium", "en_US-lessac-medium"])
+            self.assertEqual(voices_for_language("ru", Path(tmp)), ["ru_RU-dmitri-medium", "ru_RU-ruslan-medium", "ru_RU-irina-medium", "ru_RU-denis-medium"])
 
     def test_missing_dir(self):
         self.assertEqual(installed_voices(Path("/nonexistent/x")), [])
