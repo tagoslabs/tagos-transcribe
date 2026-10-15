@@ -11,6 +11,9 @@ from pathlib import Path
 import flet as ft
 
 from dub_ui import build_dub_view
+from chapters import ChapterError, chapters_text
+from voiceover import transcript_to_input
+from voiceover_ui import build_voiceover_view
 from i18n import (
     get_lang,
     idle_statuses,
@@ -23,7 +26,7 @@ from i18n import (
 import branding
 import look
 from prefs import choice, save_pref
-from timestamps import format_transcript_preview, segments_to_srt, segments_to_timed_text
+from timestamps import format_transcript_preview, segments_to_subtitles, segments_to_timed_text
 from transcribe import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -112,6 +115,7 @@ def main(page: ft.Page) -> None:
     session.device = saved_device
     session.compute_type = resolve_compute_type("auto", session.device)
     dub_busy = {"value": False}
+    voiceover_busy = {"value": False}
     device_dropdown = ft.Dropdown(
         value=saved_device,
         options=[
@@ -128,7 +132,7 @@ def main(page: ft.Page) -> None:
     )
 
     def refresh_shared_lock() -> None:
-        locked = session.is_running or dub_busy["value"]
+        locked = session.is_running or dub_busy["value"] or voiceover_busy["value"]
         device_dropdown.disabled = locked
         model_dropdown.disabled = locked
         language_dropdown.disabled = locked
@@ -167,6 +171,8 @@ def main(page: ft.Page) -> None:
             recursive_check.disabled = running
             timestamps_check.disabled = running
             save_srt_btn.disabled = running
+            send_voiceover_btn.disabled = running
+            chapters_btn.disabled = running
             save_timed_btn.disabled = running
             sync_workspace()
             page.update()
@@ -512,6 +518,8 @@ def main(page: ft.Page) -> None:
             timestamps_check.disabled = False
             save_srt_btn.disabled = False
             save_timed_btn.disabled = False
+            send_voiceover_btn.disabled = False
+            chapters_btn.disabled = False
             refresh_file_list()
             page.update()
 
@@ -693,7 +701,7 @@ def main(page: ft.Page) -> None:
             return
         if not path:
             return
-        Path(path).write_text(segments_to_srt(last_result.segments), encoding="utf-8")
+        Path(path).write_text(segments_to_subtitles(last_result.segments), encoding="utf-8")
         show_message(t("srt_saved"))
 
     async def on_save_timed(_=None) -> None:
@@ -868,6 +876,42 @@ def main(page: ft.Page) -> None:
         t("save_timed"),
         on_click=on_save_timed,
     )
+    def copy_chapters(_=None) -> None:
+        if last_result is None:
+            show_message(t("nothing_to_copy"))
+            return
+        try:
+            text = chapters_text(last_result.segments)
+        except ChapterError:
+            show_message(t("chapters_too_short"), error=True)
+            return
+
+        async def copy_to_clipboard() -> None:
+            await clipboard.set(text)
+            show_message(t("chapters_copied"))
+
+        page.run_task(copy_to_clipboard)
+
+    chapters_btn = ft.OutlinedButton(
+        t("chapters"),
+        icon=ft.Icons.FORMAT_LIST_NUMBERED,
+        on_click=copy_chapters,
+    )
+    export_label = ft.Text(t("export"), size=12, color=look.MUTE)
+
+    def send_to_voiceover(_=None) -> None:
+        if last_result is None:
+            show_message(t("nothing_to_save"))
+            return
+        source = transcript_to_input(last_result.segments)
+        voiceover_hooks["load"](source, last_result.source.name, last_result.language)
+        show_voiceover_mode()
+
+    send_voiceover_btn = ft.OutlinedButton(
+        t("send_to_voiceover"),
+        icon=ft.Icons.RECORD_VOICE_OVER_OUTLINED,
+        on_click=send_to_voiceover,
+    )
     copy_btn = ft.OutlinedButton(
         t("copy"),
         icon=ft.Icons.CONTENT_COPY_OUTLINED,
@@ -899,9 +943,14 @@ def main(page: ft.Page) -> None:
             ft.Row(
                 [
                     timestamps_check,
+                    ft.VerticalDivider(width=12, color=look.LINE),
+                    export_label,
                     copy_btn,
-                    save_srt_btn,
                     save_timed_btn,
+                    save_srt_btn,
+                    chapters_btn,
+                    ft.VerticalDivider(width=12, color=look.LINE),
+                    send_voiceover_btn,
                 ],
                 spacing=8,
                 wrap=True,
@@ -959,21 +1008,32 @@ def main(page: ft.Page) -> None:
         on_source_changed=lambda key: apply_source_key(key, from_dub=True),
     )
 
-    def paint_nav(text_mode: bool) -> None:
-        transcribe_mode_btn.style = look.quiet_style(text_mode)
-        dub_mode_btn.style = look.quiet_style(not text_mode)
+    voiceover_hooks: dict = {}
+
+    def on_voiceover_busy(active: bool) -> None:
+        voiceover_busy["value"] = active
+        refresh_shared_lock()
+
+    voiceover_view = build_voiceover_view(page, on_busy=on_voiceover_busy, ui_hooks=voiceover_hooks)
+
+    def show_mode(mode: str) -> None:
+        transcribe_view.visible = mode == "text"
+        dub_view.visible = mode == "dub"
+        voiceover_view.visible = mode == "voiceover"
+        transcribe_mode_btn.style = look.quiet_style(mode == "text")
+        dub_mode_btn.style = look.quiet_style(mode == "dub")
+        voiceover_mode_btn.style = look.quiet_style(mode == "voiceover")
+        page.update()
 
     def show_transcribe_mode(_=None) -> None:
-        transcribe_view.visible = True
-        dub_view.visible = False
-        paint_nav(True)
-        page.update()
+        show_mode("text")
 
     def show_dub_mode(_=None) -> None:
-        transcribe_view.visible = False
-        dub_view.visible = True
-        paint_nav(False)
-        page.update()
+        show_mode("dub")
+
+    def show_voiceover_mode(_=None) -> None:
+        voiceover_hooks["refresh_voices"]()
+        show_mode("voiceover")
 
     transcribe_mode_btn = ft.FilledButton(
         t("mode_text"),
@@ -986,6 +1046,12 @@ def main(page: ft.Page) -> None:
         icon=ft.Icons.RECORD_VOICE_OVER_OUTLINED,
         style=look.quiet_style(False),
         on_click=show_dub_mode,
+    )
+    voiceover_mode_btn = ft.FilledButton(
+        t("mode_voiceover"),
+        icon=ft.Icons.GRAPHIC_EQ,
+        style=look.quiet_style(False),
+        on_click=show_voiceover_mode,
     )
     menu_blurb = ft.Text(
         t("menu_blurb"),
@@ -1113,6 +1179,7 @@ def main(page: ft.Page) -> None:
                 label_task,
                 transcribe_mode_btn,
                 dub_mode_btn,
+                voiceover_mode_btn,
                 ft.Divider(height=16, color=look.LINE),
                 label_model,
                 model_dropdown,
@@ -1142,6 +1209,10 @@ def main(page: ft.Page) -> None:
         label_device.value = t("device")
         transcribe_mode_btn.content = t("mode_text")
         dub_mode_btn.content = t("mode_dub")
+        voiceover_mode_btn.content = t("mode_voiceover")
+        send_voiceover_btn.content = t("send_to_voiceover")
+        chapters_btn.content = t("chapters")
+        export_label.value = t("export")
         files_title.value = t("files")
         files_hint.value = t("formats")
         empty_hint.value = t("empty_files")
@@ -1196,6 +1267,7 @@ def main(page: ft.Page) -> None:
         apply_dub = dub_hooks.get("apply")
         if apply_dub is not None:
             apply_dub()
+        voiceover_hooks["apply"]()
         refresh_file_list()
 
     ui_lang_dropdown.on_select = apply_ui_language
@@ -1211,7 +1283,7 @@ def main(page: ft.Page) -> None:
                         [
                             menu,
                             ft.Column(
-                                [transcribe_view, dub_view],
+                                [transcribe_view, dub_view, voiceover_view],
                                 expand=True,
                                 spacing=0,
                             ),

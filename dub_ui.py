@@ -31,7 +31,7 @@ from timestamps import (
     load_segments,
     parse_srt,
     segments_payload,
-    segments_to_srt,
+    segments_to_subtitles,
     segments_to_timed_text,
 )
 from i18n import all_values, no_file_labels, t
@@ -570,13 +570,7 @@ def build_dub_view(
         if not path:
             return
         Path(path).write_text(
-            segments_to_srt(
-                rows,
-                text_key=key,
-                total_duration=float(state["duration"] or 0.0) or None,
-                extend_cues=True,
-                skip_empty=True,
-            ),
+            segments_to_subtitles(rows, text_key=key, max_duration=None),
             encoding="utf-8",
         )
         show_message(t("srt_saved"))

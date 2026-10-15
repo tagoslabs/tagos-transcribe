@@ -840,48 +840,26 @@ def _spoken_text(segment: dict) -> str:
     return spoken
 
 
-def synthesize_track(
-    segments: list[dict],
+def load_piper_voice(
     voice_name: str,
     models_dir: Path,
-    total_duration: float,
-    tmp_dir: Path,
-    max_speed: float = DEFAULT_MAX_SPEED,
     *,
     on_progress: ProgressCallback | None = None,
     cancel: CancelCallback | None = None,
-    ffmpeg: str | None = None,
-) -> tuple[np.ndarray, int, list[dict]]:
+):
+    """Load a Piper voice, downloading it first if it is not in models/piper yet."""
     from piper import PiperVoice
+
+    onnx = ensure_piper_voice(voice_name, models_dir, on_progress=on_progress, cancel=cancel)
+    return PiperVoice.load(str(onnx))
+
+
+def make_synth(voice, tmp_dir: Path) -> Callable[[str, float], np.ndarray]:
+    """Return ``synth(text, length_scale)`` -> mono float32 samples at the voice rate."""
     from piper import SynthesisConfig
 
-    check_cancel(cancel)
-    # Same filter as the prototype: skip blank lines and [неразборчиво], then
-    # the slot runs up to the next line that is actually spoken.
-    spoken_segments: list[dict] = []
-    for segment in segments:
-        spoken = _spoken_text(segment)
-        if not spoken or spoken == "[неразборчиво]":
-            continue
-        spoken_segments.append(segment)
-    if not spoken_segments:
-        raise ValueError("no translated lines to speak")
-
-    if on_progress:
-        on_progress("tts", 0.0, voice_name)
-    onnx = ensure_piper_voice(
-        voice_name,
-        models_dir,
-        on_progress=on_progress,
-        cancel=cancel,
-    )
-    voice = PiperVoice.load(str(onnx))
-    sample_rate = int(voice.config.sample_rate)
-    track = np.zeros(int((total_duration + 30.0) * sample_rate), np.float32)
-    cursor = 0.0
-    report: list[dict] = []
-    ffmpeg = ffmpeg or find_ffmpeg()
     tmp_dir = Path(tmp_dir)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
 
     def synth(text: str, length_scale: float) -> np.ndarray:
         wav_path = tmp_dir / "seg.wav"
@@ -899,11 +877,51 @@ def synthesize_track(
             samples = samples.reshape(-1, channels).mean(axis=1)
         return np.ascontiguousarray(samples, dtype=np.float32)
 
+    return synth
+
+
+def synthesize_track(
+    segments: list[dict],
+    voice_name: str,
+    models_dir: Path,
+    total_duration: float,
+    tmp_dir: Path,
+    max_speed: float = DEFAULT_MAX_SPEED,
+    *,
+    on_progress: ProgressCallback | None = None,
+    cancel: CancelCallback | None = None,
+    ffmpeg: str | None = None,
+    length_scale: float = 1.0,
+) -> tuple[np.ndarray, int, list[dict]]:
+    check_cancel(cancel)
+    # Same filter as the prototype: skip blank lines and [неразборчиво], then
+    # the slot runs up to the next line that is actually spoken.
+    spoken_segments: list[dict] = []
+    for segment in segments:
+        spoken = _spoken_text(segment)
+        if not spoken or spoken == "[неразборчиво]":
+            continue
+        spoken_segments.append(segment)
+    if not spoken_segments:
+        raise ValueError("no translated lines to speak")
+
+    if on_progress:
+        on_progress("tts", 0.0, voice_name)
+    voice = load_piper_voice(voice_name, models_dir, on_progress=on_progress, cancel=cancel)
+    sample_rate = int(voice.config.sample_rate)
+    track = np.zeros(int((total_duration + 30.0) * sample_rate), np.float32)
+    cursor = 0.0
+    report: list[dict] = []
+    ffmpeg = ffmpeg or find_ffmpeg()
+    tmp_dir = Path(tmp_dir)
+
+    synth = make_synth(voice, tmp_dir)
+
     for index, segment in enumerate(spoken_segments):
         text = _spoken_text(segment)
         check_cancel(cancel)
         start, slot = segment_slot(index, spoken_segments, cursor, total_duration)
-        natural = synth(text, 1.0)
+        natural = synth(text, length_scale)
 
         def resynth(length_scale: float, phrase: str = text) -> np.ndarray:
             return synth(phrase, length_scale)

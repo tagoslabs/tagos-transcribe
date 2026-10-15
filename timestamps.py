@@ -116,6 +116,97 @@ def segments_to_srt(
     return "\n".join(blocks) + "\n"
 
 
+SUB_MAX_LINE = 42
+SUB_MAX_LINES = 2
+SUB_MAX_DURATION = 7.0
+SUB_MIN_DURATION = 0.7
+SUB_GAP = 0.04
+
+
+def wrap_subtitle_lines(text: str, max_line: int = SUB_MAX_LINE) -> list[str]:
+    """Greedy word wrap. A single word longer than max_line stays on its own line."""
+    lines: list[str] = []
+    current = ""
+    for word in " ".join(text.split()).split(" "):
+        if not word:
+            continue
+        candidate = f"{current} {word}" if current else word
+        if len(candidate) <= max_line or not current:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _split_cue(start: float, end: float, text: str, max_line: int, max_lines: int,
+               max_duration: float | None) -> list[tuple[float, float, str]]:
+    lines = wrap_subtitle_lines(text, max_line)
+    groups = [lines[i:i + max_lines] for i in range(0, len(lines), max_lines)] or [[]]
+    duration = max(end - start, 0.0)
+    if max_duration and duration / len(groups) > max_duration and len(lines) > len(groups):
+        # Long speech: one line per cue gives each piece less screen time.
+        groups = [[line] for line in lines]
+    total_chars = sum(len(" ".join(g)) for g in groups) or 1
+    pieces: list[tuple[float, float, str]] = []
+    cursor = start
+    for index, group in enumerate(groups):
+        share = len(" ".join(group)) / total_chars
+        piece_end = end if index == len(groups) - 1 else cursor + duration * share
+        pieces.append((cursor, piece_end, "\n".join(group)))
+        cursor = piece_end
+    return pieces
+
+
+def segments_to_subtitles(
+    segments: Iterable[Any],
+    *,
+    text_key: str = "text",
+    max_line: int = SUB_MAX_LINE,
+    max_lines: int = SUB_MAX_LINES,
+    max_duration: float | None = SUB_MAX_DURATION,
+    min_duration: float = SUB_MIN_DURATION,
+) -> str:
+    """Standard SubRip for upload (YouTube etc.).
+
+    Numbered cues from 1, ``HH:MM:SS,mmm --> HH:MM:SS,mmm``, at most ``max_lines``
+    lines of ``max_line`` characters, long cues split by text share, no overlaps,
+    a minimum on-screen time where the next cue allows it, blank cues dropped.
+    With ``max_duration=None`` cues are wrapped but never split, so the cue count
+    matches the segments (Dub review files rely on that).
+    """
+    raw: list[tuple[float, float, str]] = []
+    for segment in segments:
+        text = segment_field(segment, text_key).strip()
+        if not text:
+            continue
+        start, end = segment_start(segment), segment_end(segment)
+        if max_duration is None:
+            raw.append((start, max(end, start), "\n".join(wrap_subtitle_lines(text, max_line))))
+        else:
+            raw.extend(_split_cue(start, max(end, start), text, max_line, max_lines, max_duration))
+    raw.sort(key=lambda cue: cue[0])
+    blocks: list[str] = []
+    previous_end: float | None = None
+    for index, (start, end, text) in enumerate(raw):
+        start = max(start, 0.0)
+        if previous_end is not None:
+            start = max(start, previous_end + SUB_GAP)
+        end = max(end, start)
+        limit = raw[index + 1][0] - SUB_GAP if index + 1 < len(raw) else None
+        if end - start < min_duration:
+            end = start + min_duration
+        if limit is not None and end > limit:
+            end = max(limit, start + 0.1)
+        previous_end = end
+        blocks.append(
+            f"{len(blocks) + 1}\n{format_srt_timestamp(start)} --> {format_srt_timestamp(end)}\n{text}\n"
+        )
+    return "\n".join(blocks) + "\n" if blocks else ""
+
+
 def format_transcript_preview(
     source_name: str,
     language: str | None,

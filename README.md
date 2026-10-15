@@ -4,16 +4,19 @@
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/tagoslabs)
 
-Offline transcription, translation and voice-over dubbing for local audio and video files.
+Offline transcription, translation, voice-over dubbing and text-to-speech for local files.
 Nothing is sent to the cloud: models are downloaded once and then everything runs on your machine.
 
 ## What it does
 
 - **Offline transcription** of audio and video (faster-whisper: `small`, `medium`, `large-v3`), CPU or NVIDIA GPU.
-- **Timestamps / SRT**: plain text, timestamped text, or SubRip `.srt` subtitles.
+- **Exports** (Transcribe → Export): text for AI (copy), text with timestamps, standard SubRip `.srt` ready for YouTube (numbered cues, ≤ 2 lines × 42 chars, ≤ 7 s per cue, no overlaps), and **YouTube chapters** (`0:00 Title` lines, copied to the clipboard; offline heuristic from pauses and topic shifts, ≥ 3 chapters, ≥ 10 s each).
 - **Offline translation**: Argos Translate for English→Russian, NLLB-200 for other pairs.
 - **Review / editing**: stop after transcription or translation, edit the segments, then continue.
 - **Voice-over dubbing**: a Piper TTS voice is mixed over the original audio, aligned to the timecodes.
+- **Voiceover (text to speech)**: paste text or open a `.txt` / `.srt`, pick language, voice and speed, preview, export WAV or MP3. An `.srt` can be voiced on its subtitle timings. A Transcribe result can be sent here with **Send to Voiceover**. Uses the same Piper voices (and licences) as dubbing.
+
+The three modes: **Transcribe**, **Dub**, **Voiceover**.
 
 Video input is any local file. The app has no built-in downloading.
 
@@ -37,6 +40,9 @@ Requires `curl`, `tar` and `ffmpeg`. If you move the folder, run `./install.sh` 
 ./dub.sh video.mp4 --lang en --target ru -o out/   # dub into Russian
 ./dub.sh video.mp4 --stop-after-translate          # review/edit segments, then rerun with --segments
 ./dub.sh --help
+./voiceover.sh --text "Привет!" --lang ru -o hello.mp3     # text to speech
+./voiceover.sh subs.srt --timed --voice en_US-lessac-medium -o voice.wav
+./voiceover.sh --list-voices
 ```
 
 ### Dubbing defaults
@@ -66,9 +72,9 @@ Models are **not** included in this repository; they are downloaded on first use
 | OpenAI Whisper via faster-whisper (Systran CTranslate2 conversions) | transcription | MIT |
 | **NLLB-200 distilled 600M** (Meta; CT2 int8 conversion `JustFrederik/nllb-200-distilled-600M-ct2-int8`) | translation for all pairs except en→ru | **CC-BY-NC 4.0 — non-commercial use only** |
 | Argos Translate `translate-en_ru` 1.9 | en→ru translation (default for that pair) | **no explicit license** in the package (README lists OPUS training corpora only; [argos-translate#507](https://github.com/argosopentech/argos-translate/issues/507)). Argos states its own model work is MIT/CC0 ([#76](https://github.com/argosopentech/argos-translate/issues/76)); individual corpora may carry their own terms |
-| Piper voice `ru_RU-dmitri-medium` (default) | TTS voice-over | dataset CC0, but **fine-tuned from `en_US-lessac`** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/dmitri/medium/MODEL_CARD)) |
-| Piper base voice `en_US-lessac` | base of the Dmitri voice | Blizzard 2013 Lessac data: **research-only licence, commercial use excluded** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD), [licence](https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html)) |
-| Other Piper voices | `--voice` | per voice — see each voice's `MODEL_CARD` |
+| Piper voice `ru_RU-dmitri-medium` (default) | TTS voice-over and Voiceover mode | dataset CC0, but **fine-tuned from `en_US-lessac`** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/dmitri/medium/MODEL_CARD)) |
+| Piper voice `en_US-lessac` | base of the Dmitri voice; default English voice | Blizzard 2013 Lessac data: **research-only licence, commercial use excluded** ([MODEL_CARD](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/lessac/medium/MODEL_CARD), [licence](https://www.cstr.ed.ac.uk/projects/blizzard/2013/lessac_blizzard2013/license.html)) |
+| Other Piper voices | `--voice`, Voiceover voice list | per voice — see each voice's `MODEL_CARD` |
 | piper-tts (Python package) | TTS engine | GPL-3.0-or-later |
 
 > **Non-commercial notice:** translations produced with NLLB-200 are subject to CC-BY-NC 4.0. Do not use the NLLB path commercially. For English→Russian the app uses Argos by default (`--translator auto`).
@@ -95,7 +101,7 @@ venv/bin/python -m unittest discover -s tests
 
 ## По-русски
 
-**Tagos Transcribe** от Tagos Labs — офлайн-транскрибация аудио и видео, таймкоды и SRT, офлайн-перевод (Argos для en→ru, NLLB-200 для остальных пар), правка сегментов и закадровая озвучка голосом Piper.
+**Tagos Transcribe** от Tagos Labs — офлайн-транскрибация аудио и видео, таймкоды и SRT, офлайн-перевод (Argos для en→ru, NLLB-200 для остальных пар), правка сегментов, закадровая озвучка голосом Piper, режим «Озвучка текста» (текст / .srt → WAV или MP3) и экспорт SRT для YouTube и глав YouTube.
 
 ```bash
 ./setup.sh && ./run_gui.sh        # GUI

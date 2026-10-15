@@ -549,12 +549,12 @@ def _print_transcript(result: TranscriptionResult, timestamps: bool) -> None:
 
 
 def _export_transcripts(args: argparse.Namespace, files: list[Path], result: TranscriptionResult) -> None:
-    from timestamps import resolve_export_path, segments_to_srt, segments_to_timed_text
+    from timestamps import resolve_export_path, segments_to_subtitles, segments_to_timed_text
 
     multiple = len(files) > 1
     if args.save_srt:
         path = resolve_export_path(args.save_srt, result.source, ".srt", multiple=multiple)
-        path.write_text(segments_to_srt(result.segments, text_key="text"), encoding="utf-8")
+        path.write_text(segments_to_subtitles(result.segments, text_key="text"), encoding="utf-8")
         print(f"saved: {path}", file=sys.stderr)
     if args.save_timed_text:
         path = resolve_export_path(
